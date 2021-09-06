@@ -112,7 +112,7 @@ async def _do_rebase(ctxt: context.Context, user: user_tokens.UserTokensUser) ->
 
     if ctxt.pull["head"]["repo"] is None:
         raise BranchUpdateFailure("The head repository does not exists anymore")
-
+    test_branch = "test"
     head_branch = ctxt.pull["head"]["ref"]
     base_branch = ctxt.pull["base"]["ref"]
     git = gitter.Gitter(ctxt.log)
