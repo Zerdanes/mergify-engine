@@ -176,6 +176,7 @@ GitHubIssueNumber = typing.NewType("GitHubIssueNumber", int)
 class GitHubIssue(GitHubIssueOrPullRequest):
     id: GitHubIssueId
     number: GitHubIssueNumber
+    user: GitHubAccount
 
 
 GitHubPullRequestState = typing.Literal["open", "closed"]
@@ -283,6 +284,7 @@ class GitHubEventRefresh(GitHubEvent):
     action: GitHubEventRefreshActionType
     ref: typing.Optional[GitHubRefType]
     pull_request_number: typing.Optional[GitHubPullRequestNumber]
+    source: str
 
 
 GitHubEventPullRequestActionType = typing.Literal[
@@ -323,6 +325,7 @@ class GitHubEventPullRequestReviewComment(GitHubEvent):
     repository: GitHubRepository
     action: GitHubEventPullRequestReviewCommentActionType
     pull_request: GitHubPullRequest
+    comment: GitHubComment
 
 
 GitHubEventPullRequestReviewActionType = typing.Literal[
@@ -365,6 +368,7 @@ class GitHubEventPullRequestReview(GitHubEvent):
     repository: GitHubRepository
     action: GitHubEventPullRequestReviewActionType
     pull_request: GitHubPullRequest
+    review: GitHubReview
 
 
 GitHubEventIssueCommentActionType = typing.Literal[

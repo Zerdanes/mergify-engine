@@ -324,6 +324,13 @@ class FunctionalTestBase(unittest.IsolatedAsyncioTestCase):
 
     async def asyncSetUp(self) -> None:
         super(FunctionalTestBase, self).setUp()
+
+        # NOTE(sileht): don't preempted bucket consumption
+        # Otherwise preemption doesn't occur at the same moment during record
+        # and replay. Making some tests working during record and failing
+        # during replay.
+        config.BUCKET_PROCESSING_MAX_SECONDS = 100000
+
         self.existing_labels: typing.List[str] = []
         self.protected_branches: typing.Set[str] = set()
         self.pr_counter: int = 0
@@ -444,7 +451,7 @@ class FunctionalTestBase(unittest.IsolatedAsyncioTestCase):
                 for f in subscription.Features.__members__
             )
             if self.SUBSCRIPTION_ACTIVE
-            else frozenset(),
+            else frozenset([subscription.Features.PUBLIC_REPOSITORY]),
         )
         await self.subscription._save_subscription_to_cache()
         self.user_tokens = user_tokens.UserTokens(
@@ -528,7 +535,7 @@ class FunctionalTestBase(unittest.IsolatedAsyncioTestCase):
                 owner_id,
                 False,
                 "We're just testing",
-                set(),
+                set(subscription.Features.PUBLIC_REPOSITORY),
             )
 
         async def fake_subscription(redis_cache, owner_id):
@@ -539,7 +546,7 @@ class FunctionalTestBase(unittest.IsolatedAsyncioTestCase):
                 owner_id,
                 False,
                 "We're just testing",
-                set(),
+                set(subscription.Features.PUBLIC_REPOSITORY),
             )
 
         mock.patch(

@@ -40,7 +40,7 @@ SubscriptionT = typing.TypeVar("SubscriptionT", bound="SubscriptionBase")
 @enum.unique
 class Features(enum.Enum):
     PRIVATE_REPOSITORY = "private_repository"
-    LARGE_REPOSITORY = "large_repository"
+    PUBLIC_REPOSITORY = "public_repository"
     PRIORITY_QUEUES = "priority_queues"
     CUSTOM_CHECKS = "custom_checks"
     RANDOM_REQUEST_REVIEWS = "random_request_reviews"
@@ -56,7 +56,7 @@ class SubscriptionDict(typing.TypedDict):
     features: typing.List[
         typing.Literal[
             "private_repository",
-            "large_repository",
+            "public_repository",
             "priority_queues",
             "custom_checks",
             "random_request_reviews",
@@ -94,7 +94,7 @@ class SubscriptionBase(abc.ABC):
 
     def has_feature(self, feature: Features) -> bool:
         """Return if the feature for a plan is available."""
-        return self.active and feature in self.features
+        return feature in self.features
 
     @staticmethod
     def missing_feature_reason(owner: str) -> str:

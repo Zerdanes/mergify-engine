@@ -14,7 +14,6 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import random
 from urllib import parse
 
 import voluptuous
@@ -28,13 +27,17 @@ from mergify_engine.clients import http
 
 
 class LabelAction(actions.Action):
+    flags = (
+        actions.ActionFlag.ALLOW_AS_ACTION
+        | actions.ActionFlag.ALLOW_ON_CONFIGURATION_CHANGED
+        | actions.ActionFlag.ALWAYS_RUN
+    )
+
     validator = {
-        voluptuous.Required("add", default=[]): [str],
-        voluptuous.Required("remove", default=[]): [str],
+        voluptuous.Required("add", default=list): [str],
+        voluptuous.Required("remove", default=list): [str],
         voluptuous.Required("remove_all", default=False): bool,
     }
-
-    silent_report = True
 
     async def run(
         self, ctxt: context.Context, rule: rules.EvaluatedRule
@@ -44,20 +47,8 @@ class LabelAction(actions.Action):
         pull_labels = {label["name"] for label in ctxt.pull["labels"]}
 
         if self.config["add"]:
-            all_label = [
-                label["name"]
-                async for label in ctxt.client.items(f"{ctxt.base_url}/labels")
-            ]
             for label in self.config["add"]:
-                if label not in all_label:
-                    color = f"{random.randrange(16 ** 6):06x}"  # nosec
-                    try:
-                        await ctxt.client.post(
-                            f"{ctxt.base_url}/labels",
-                            json={"name": label, "color": color},
-                        )
-                    except http.HTTPClientSideError:
-                        continue
+                await ctxt.repository.ensure_label_exists(label)
 
             missing_labels = set(self.config["add"]) - pull_labels
             if missing_labels:
@@ -66,12 +57,21 @@ class LabelAction(actions.Action):
                     json={"labels": list(missing_labels)},
                 )
                 labels_changed = True
+                labels_by_name = {
+                    _l["name"]: _l for _l in await ctxt.repository.get_labels()
+                }
+                ctxt.pull["labels"].extend(
+                    [labels_by_name[label_name] for label_name in missing_labels]
+                )
+
+        pull_labels = {label["name"] for label in ctxt.pull["labels"]}
 
         if self.config["remove_all"]:
             if ctxt.pull["labels"]:
                 await ctxt.client.delete(
                     f"{ctxt.base_url}/issues/{ctxt.pull['number']}/labels"
                 )
+                ctxt.pull["labels"] = []
                 labels_changed = True
 
         elif self.config["remove"]:
@@ -82,8 +82,17 @@ class LabelAction(actions.Action):
                         await ctxt.client.delete(
                             f"{ctxt.base_url}/issues/{ctxt.pull['number']}/labels/{label_escaped}"
                         )
-                    except http.HTTPClientSideError:
+                    except http.HTTPClientSideError as e:
+                        ctxt.log.warning(
+                            "fail to delete label",
+                            label=label,
+                            status_code=e.status_code,
+                            error_message=e.message,
+                        )
                         continue
+                    ctxt.pull["labels"] = [
+                        _l for _l in ctxt.pull["labels"] if _l["name"] != label
+                    ]
                     labels_changed = True
 
         if labels_changed:
@@ -95,3 +104,8 @@ class LabelAction(actions.Action):
             return check_api.Result(
                 check_api.Conclusion.SUCCESS, "No label to add or remove", ""
             )
+
+    async def cancel(
+        self, ctxt: context.Context, rule: "rules.EvaluatedRule"
+    ) -> check_api.Result:  # pragma: no cover
+        return actions.CANCELLED_CHECK_REPORT

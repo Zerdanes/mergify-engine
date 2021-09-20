@@ -54,11 +54,9 @@ GIT_MESSAGE_TO_EXCEPTION = collections.OrderedDict(
         ("RPC failed; HTTP 401", GitAuthenticationFailure),
         ("This repository was archived so it is read-only.", GitFatalError),
         ("organization has enabled or enforced SAML SSO.", GitFatalError),
-        ("could not apply", GitFatalError),
         ("Invalid username or password", GitAuthenticationFailure),
         ("Repository not found", GitAuthenticationFailure),
         ("The requested URL returned error: 403", GitAuthenticationFailure),
-        ("Patch failed at", GitFatalError),
         ("remote contains work that you do", GitErrorRetriable),
         ("remote end hung up unexpectedly", GitErrorRetriable),
         ("cannot lock ref 'refs/heads/", GitErrorRetriable),
@@ -131,8 +129,6 @@ class Gitter(object):
                             output,
                         )
 
-                if p.returncode == 128:
-                    raise GitFatalError(p.returncode, output)
                 raise GitError(p.returncode, output)
             else:
                 return output

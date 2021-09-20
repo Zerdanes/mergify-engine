@@ -36,6 +36,7 @@ from mergify_engine import user_tokens
 from mergify_engine import utils
 from mergify_engine.actions import utils as action_utils
 from mergify_engine.clients import http
+from mergify_engine.rules import conditions
 
 
 LOG = daiquiri.getLogger(__name__)
@@ -168,9 +169,15 @@ async def get_rule_checks_status(
         return check_api.Conclusion.FAILURE
 
 
-class MergeBaseAction(actions.Action):
-    only_once = True
-    can_be_used_on_configuration_change = False
+class MergeBaseAction(actions.Action, abc.ABC):
+    flags = (
+        actions.ActionFlag.ALLOW_AS_ACTION
+        | actions.ActionFlag.ALWAYS_SEND_REPORT
+        | actions.ActionFlag.DISALLOW_RERUN_ON_OTHER_RULES
+        # FIXME(sileht): MRGFY-562
+        # | actions.ActionFlag.ALWAYS_RUN
+    )
+
     UNQUEUE_DOCUMENTATION = ""
     MESSAGE_ACTION_NAME = "Merge"
 
@@ -222,7 +229,6 @@ class MergeBaseAction(actions.Action):
         is_behind: bool = False,
     ) -> check_api.Result:
 
-        summary = ""
         if self.config["strict"] in (
             StrictMergeParameter.fasttrack,
             StrictMergeParameter.ordered,
@@ -235,15 +241,12 @@ class MergeBaseAction(actions.Action):
                 _ord = utils.to_ordinal_numeric(position + 1)
                 title = f"The pull request is the {_ord} in the queue to be merged"
 
-            if is_behind:
-                summary = "The pull request base branch will be updated before being merged.\n\n"
-
         elif self.config["strict"] is not StrictMergeParameter.false and is_behind:
             title = "The pull request will be updated with its base branch soon"
         else:
             title = "The pull request will be merged soon"
 
-        summary += await self._get_queue_summary(ctxt, rule, q)
+        summary = await self._get_queue_summary(ctxt, rule, q)
 
         return check_api.Result(check_api.Conclusion.PENDING, title, summary)
 
@@ -370,7 +373,7 @@ class MergeBaseAction(actions.Action):
             if ctxt.closed:
                 return output
             else:
-                return self.cancelled_check_report
+                return actions.CANCELLED_CHECK_REPORT
 
         # We just rebase the pull request, don't cancel it yet if CIs are
         # running. The pull request will be merged if all rules match again.
@@ -408,7 +411,7 @@ class MergeBaseAction(actions.Action):
 
         await q.remove_pull(ctxt)
 
-        return self.cancelled_check_report
+        return actions.CANCELLED_CHECK_REPORT
 
     def _set_effective_priority(self, ctxt: context.Context) -> None:
         self.config["effective_priority"] = typing.cast(
@@ -715,3 +718,17 @@ This pull request must be merged manually."""
             return None
 
         return check_api.Result(conclusion, title, summary)
+
+    async def get_conditions_requirements(
+        self,
+        ctxt: context.Context,
+    ) -> typing.List[
+        typing.Union[conditions.RuleConditionGroup, conditions.RuleCondition]
+    ]:
+        branch_protection_conditions = (
+            await conditions.get_branch_protection_conditions(
+                ctxt.repository, ctxt.pull["base"]["ref"]
+            )
+        )
+        depends_on_conditions = await conditions.get_depends_on_conditions(ctxt)
+        return branch_protection_conditions + depends_on_conditions

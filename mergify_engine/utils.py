@@ -24,10 +24,13 @@ import typing
 import uuid
 
 import aredis
+import daiquiri
 
 from mergify_engine import config
 from mergify_engine import github_types
 
+
+LOG = daiquiri.getLogger()
 
 _PROCESS_IDENTIFIER = os.environ.get("DYNO") or socket.gethostname()
 
@@ -185,13 +188,14 @@ class FakePR:
         setattr(self, key, value)
 
 
-async def send_refresh(
+async def _send_refresh(
     redis_cache: RedisCache,
     redis_stream: RedisStream,
     repository: github_types.GitHubRepository,
+    action: github_types.GitHubEventRefreshActionType,
+    source: str,
     pull_request_number: typing.Optional[github_types.GitHubPullRequestNumber] = None,
     ref: typing.Optional[github_types.GitHubRefType] = None,
-    action: github_types.GitHubEventRefreshActionType = "user",
 ) -> None:
     # Break circular import
     from mergify_engine import github_events
@@ -199,9 +203,10 @@ async def send_refresh(
     data = github_types.GitHubEventRefresh(
         {
             "action": action,
+            "source": source,
             "ref": ref,
-            "repository": repository,
             "pull_request_number": pull_request_number,
+            "repository": repository,
             "sender": {
                 "login": github_types.GitHubLogin("<internal>"),
                 "id": github_types.GitHubAccountIdType(0),
@@ -221,6 +226,74 @@ async def send_refresh(
     await github_events.filter_and_dispatch(
         redis_cache, redis_stream, "refresh", str(uuid.uuid4()), data
     )
+
+
+async def send_pull_refresh(
+    redis_cache: RedisCache,
+    redis_stream: RedisStream,
+    repository: github_types.GitHubRepository,
+    action: github_types.GitHubEventRefreshActionType,
+    pull_request_number: github_types.GitHubPullRequestNumber,
+    source: str,
+) -> None:
+    LOG.info(
+        "sending pull refresh",
+        gh_owner=repository["owner"]["login"],
+        gh_repo=repository["name"],
+        gh_private=repository["private"],
+        gh_pull=pull_request_number,
+        action=action,
+        source=source,
+    )
+
+    await _send_refresh(
+        redis_cache,
+        redis_stream,
+        repository,
+        action,
+        source,
+        pull_request_number=pull_request_number,
+    )
+
+
+async def send_repository_refresh(
+    redis_cache: RedisCache,
+    redis_stream: RedisStream,
+    repository: github_types.GitHubRepository,
+    action: github_types.GitHubEventRefreshActionType,
+    source: str,
+) -> None:
+
+    LOG.info(
+        "sending repository refresh",
+        gh_owner=repository["owner"]["login"],
+        gh_repo=repository["name"],
+        gh_private=repository["private"],
+        action=action,
+        source=source,
+    )
+
+    await _send_refresh(redis_cache, redis_stream, repository, action, source)
+
+
+async def send_branch_refresh(
+    redis_cache: RedisCache,
+    redis_stream: RedisStream,
+    repository: github_types.GitHubRepository,
+    action: github_types.GitHubEventRefreshActionType,
+    ref: github_types.GitHubRefType,
+    source: str,
+) -> None:
+    LOG.info(
+        "sending repository branch refresh",
+        gh_owner=repository["owner"]["login"],
+        gh_repo=repository["name"],
+        gh_private=repository["private"],
+        gh_ref=ref,
+        action=action,
+        source=source,
+    )
+    await _send_refresh(redis_cache, redis_stream, repository, action, source, ref=ref)
 
 
 _T = typing.TypeVar("_T")

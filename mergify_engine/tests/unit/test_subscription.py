@@ -155,7 +155,7 @@ async def test_active_feature(redis_cache):
         "friend",
         frozenset([subscription.Features.PRIORITY_QUEUES]),
     )
-    assert sub.has_feature(subscription.Features.PRIORITY_QUEUES) is False
+    assert sub.has_feature(subscription.Features.PRIORITY_QUEUES) is True
     sub = subscription.Subscription(
         redis_cache,
         123,
@@ -171,11 +171,10 @@ async def test_active_feature(redis_cache):
         {
             "subscription_active": True,
             "subscription_reason": "friend",
-            "features": ["private_repository", "large_repository"],
+            "features": ["private_repository"],
         },
     )
     assert sub.has_feature(subscription.Features.PRIVATE_REPOSITORY) is True
-    assert sub.has_feature(subscription.Features.LARGE_REPOSITORY) is True
     assert sub.has_feature(subscription.Features.PRIORITY_QUEUES) is False
 
 
@@ -191,7 +190,7 @@ async def test_subscription_on_premise_valid(
             "subscription_reason": "azertyuio",
             "features": [
                 "private_repository",
-                "large_repository",
+                "public_repository",
                 "priority_queues",
                 "custom_checks",
                 "random_request_reviews",

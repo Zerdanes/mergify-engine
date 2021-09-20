@@ -11,7 +11,8 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-
+from datadog import statsd
+import ddtrace
 from sentry_sdk.integrations.asgi import SentryAsgiMiddleware
 
 from mergify_engine import config
@@ -22,4 +23,6 @@ from mergify_engine.web.root import app as application
 if config.SENTRY_URL:
     application = SentryAsgiMiddleware(application)  # type:ignore[assignment]
 
+statsd.constant_tags.append("service:engine-web")
+ddtrace.config.service = "engine-web"
 logs.setup_logging()

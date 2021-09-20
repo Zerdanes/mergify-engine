@@ -155,19 +155,26 @@ async def run_command(
 
     statsd.increment("engine.commands.count", tags=[f"name:{command.name}"])
 
-    report = await command.action.run(
-        ctxt,
-        rules.EvaluatedRule(
-            rules.PullRequestRule(
-                "", None, conditions.PullRequestRuleConditions([]), {}, False
-            )
-        ),
-    )
-
     if command.args:
         command_full = f"{command.name} {command.args}"
     else:
         command_full = command.name
+
+    conds = conditions.PullRequestRuleConditions(
+        await command.action.get_conditions_requirements(ctxt)
+    )
+    await conds([ctxt.pull_request])
+    if conds.match:
+        report = await command.action.run(
+            ctxt,
+            rules.EvaluatedRule(rules.PullRequestRule("", None, conds, {}, False)),
+        )
+    else:
+        report = check_api.Result(
+            check_api.Conclusion.PENDING,
+            f"{command_full} is pending",
+            "",
+        )
 
     conclusion = report.conclusion.name.lower()
     summary = "> " + "\n> ".join(report.summary.split("\n")).strip()
@@ -234,7 +241,8 @@ async def handle(
 
     if (
         ctxt.configuration_changed
-        and not command.action.can_be_used_on_configuration_change
+        and actions.ActionFlag.ALLOW_ON_CONFIGURATION_CHANGED
+        not in command.action.flags
     ):
         message = CONFIGURATION_CHANGE_MESSAGE
         log(message)

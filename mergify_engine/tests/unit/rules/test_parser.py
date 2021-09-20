@@ -14,6 +14,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 import datetime
+import zoneinfo
 
 from freezegun import freeze_time
 import pyparsing
@@ -29,6 +30,64 @@ now = datetime.datetime.fromisoformat("2012-01-14T20:32:00+00:00")
 @pytest.mark.parametrize(
     "line, result",
     (
+        (
+            "schedule!=Mon-Fri 12:00-23:59[Europe/Paris]",
+            {
+                "-": {
+                    "@": (
+                        "schedule",
+                        {
+                            "and": (
+                                {
+                                    "and": (
+                                        {
+                                            ">=": (
+                                                "current-day-of-week",
+                                                date.DayOfWeek(1),
+                                            )
+                                        },
+                                        {
+                                            "<=": (
+                                                "current-day-of-week",
+                                                date.DayOfWeek(5),
+                                            )
+                                        },
+                                    )
+                                },
+                                {
+                                    "and": (
+                                        {
+                                            ">=": (
+                                                "current-time",
+                                                date.Time(
+                                                    12,
+                                                    0,
+                                                    tzinfo=zoneinfo.ZoneInfo(
+                                                        "Europe/Paris"
+                                                    ),
+                                                ),
+                                            )
+                                        },
+                                        {
+                                            "<=": (
+                                                "current-time",
+                                                date.Time(
+                                                    23,
+                                                    59,
+                                                    tzinfo=zoneinfo.ZoneInfo(
+                                                        "Europe/Paris"
+                                                    ),
+                                                ),
+                                            )
+                                        },
+                                    )
+                                },
+                            )
+                        },
+                    )
+                }
+            },
+        ),
         (
             "schedule!=Mon-Fri 12:00-23:59",
             {
@@ -58,7 +117,7 @@ now = datetime.datetime.fromisoformat("2012-01-14T20:32:00+00:00")
                                         {
                                             ">=": (
                                                 "current-time",
-                                                datetime.time(
+                                                date.Time(
                                                     12, 0, tzinfo=datetime.timezone.utc
                                                 ),
                                             )
@@ -66,7 +125,7 @@ now = datetime.datetime.fromisoformat("2012-01-14T20:32:00+00:00")
                                         {
                                             "<=": (
                                                 "current-time",
-                                                datetime.time(
+                                                date.Time(
                                                     23, 59, tzinfo=datetime.timezone.utc
                                                 ),
                                             )
@@ -87,11 +146,20 @@ now = datetime.datetime.fromisoformat("2012-01-14T20:32:00+00:00")
         ("¬author~=jd", {"-": {"~=": ("author", "jd")}}),
         ("conflict", {"=": ("conflict", True)}),
         (
+            "current-time>=10:00[PST8PDT]",
+            {
+                ">=": (
+                    "current-time",
+                    date.Time(10, 0, tzinfo=zoneinfo.ZoneInfo("PST8PDT")),
+                )
+            },
+        ),
+        (
             "current-time>=10:00",
             {
                 ">=": (
                     "current-time",
-                    datetime.time(10, 0, tzinfo=datetime.timezone.utc),
+                    date.Time(10, 0, tzinfo=datetime.timezone.utc),
                 )
             },
         ),
@@ -123,7 +191,7 @@ now = datetime.datetime.fromisoformat("2012-01-14T20:32:00+00:00")
                                     {
                                         ">=": (
                                             "current-time",
-                                            datetime.time(
+                                            date.Time(
                                                 10, 2, tzinfo=datetime.timezone.utc
                                             ),
                                         )
@@ -131,7 +199,7 @@ now = datetime.datetime.fromisoformat("2012-01-14T20:32:00+00:00")
                                     {
                                         "<=": (
                                             "current-time",
-                                            datetime.time(
+                                            date.Time(
                                                 22, 35, tzinfo=datetime.timezone.utc
                                             ),
                                         )
@@ -167,13 +235,13 @@ now = datetime.datetime.fromisoformat("2012-01-14T20:32:00+00:00")
                             {
                                 ">=": (
                                     "current-time",
-                                    datetime.time(10, 2, tzinfo=datetime.timezone.utc),
+                                    date.Time(10, 2, tzinfo=datetime.timezone.utc),
                                 )
                             },
                             {
                                 "<=": (
                                     "current-time",
-                                    datetime.time(22, 35, tzinfo=datetime.timezone.utc),
+                                    date.Time(22, 35, tzinfo=datetime.timezone.utc),
                                 )
                             },
                         )
@@ -266,6 +334,7 @@ now = datetime.datetime.fromisoformat("2012-01-14T20:32:00+00:00")
             f"current-timestamp<={now.isoformat()}",
             {"<=": ("current-timestamp", now)},
         ),
+        ("-linear-history", {"-": {"=": ("linear-history", True)}}),
         ("-locked", {"-": {"=": ("locked", True)}}),
         ("assignee:sileht", {"=": ("assignee", "sileht")}),
         ("#assignee=3", {"=": ("#assignee", 3)}),
@@ -348,7 +417,9 @@ def test_search(line, result):
         "current-day>100",
         "updated-at=7 days 18:00",
         "updated-at>=100",
-        "current-datetime>=100",
+        "current-timestamp>=100",
+        "current-time>=10:00[InvalidTZ]",
+        "schedule=MON-friday 10:02-22:35[InvalidTZ]",
     ),
 )
 def test_invalid(line):
